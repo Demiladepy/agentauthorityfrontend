@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Scrollbar ─────────────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: #0A0C10; }
+::-webkit-scrollbar-thumb  { background: #1E2330; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #2a2f3f; }
+
+/* ─── Selection ─────────────────────────────────────── */
+::selection { background: rgba(232,197,71,0.2); color: #F0F2F5; }
+
+/* ─── Base ───────────────────────────────────────────── */
+body {
+  background: #0A0C10;
+  color: #C8CCD4;
+  font-family: 'Outfit', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Gold gradient button ───────────────────────────── */
+.btn-gold {
+  background: linear-gradient(135deg, #E8C547 0%, #d4a820 100%);
+  color: #0A0C10;
+  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-gold:hover  { opacity: 0.92; transform: translateY(-1px); }
+.btn-gold:active { transform: translateY(0); }
+.btn-gold:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ─── Top-edge accent line ───────────────────────────── */
+.agent-active-edge {
+  position: relative;
+}
+.agent-active-edge::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 8px 8px 0 0;
+}
+
+/* ─── Event list ─────────────────────────────────────── */
+.event-item {
+  animation: fadeSlideIn 0.25s ease-out;
+}
