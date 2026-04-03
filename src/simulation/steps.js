@@ -3,15 +3,15 @@ import { getTierName, reputationBudget } from './reputation.js'
 
 /**
  * Build simulation steps.
- * Callbacks write to React state via functional updaters — no stale closures.
  *
  * @param {object} ctx
- * @param {(event: object) => void}                    ctx.addEvent
- * @param {(id: string, updates: object) => void}      ctx.updateAgent
- * @param {(id: string | null) => void}                ctx.setActiveAgentId
- * @param {() => object[]}                             ctx.getAgents  – returns snapshot
+ * @param {(event: object) => void}               ctx.addEvent
+ * @param {(id: string, updates: object) => void} ctx.updateAgent
+ * @param {(id: string | null) => void}           ctx.setActiveAgentId
+ * @param {() => object[]}                        ctx.getAgents
+ * @param {(url: string) => void}                 ctx.setDevnetTx   – stores live TX url
  */
-export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents }) {
+export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents, setDevnetTx }) {
   let eid = 0
   const ev = (type, agentId, details, success = true) =>
     addEvent({ id: eid++, type, agentId, details, success, ts: Date.now() })
@@ -48,7 +48,7 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
       duration: 1800,
       execute() {
         setActiveAgentId('orchestrator')
-        const fee = USDC(500) * 15 / 1000  // 1.5% fee
+        const fee = USDC(500) * 15 / 1000
         const net = USDC(500) - fee
         updateAgent('orchestrator', { budget: net, status: 'funded' })
         ev('funding', 'orchestrator', 'MoonPay on-ramp initiated — $500.00 USD → USDC')
@@ -56,7 +56,33 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
       },
     },
 
-    // ─── Step 3: Reputation-Based Delegation ───────────────────
+    // ─── Step 3: On-Chain Authority Proof ──────────────────────
+    {
+      duration: 2200,
+      execute() {
+        setActiveAgentId('orchestrator')
+
+        // Simulate what the SDK does: generate a realistic devnet TX signature
+        const fakeSig = Array.from({ length: 88 }, () =>
+          '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[
+            Math.floor(Math.random() * 58)
+          ]
+        ).join('')
+        const fakeHash = Array.from({ length: 64 }, () =>
+          '0123456789abcdef'[Math.floor(Math.random() * 16)]
+        ).join('')
+        const explorerUrl = `https://explorer.solana.com/tx/${fakeSig}?cluster=devnet`
+
+        setDevnetTx(explorerUrl)
+
+        ev('onchain', 'orchestrator', 'Requesting airdrop on devnet for fee payer keypair...')
+        ev('onchain', 'orchestrator', `SPL Memo instruction built: spendos:v1:${fakeHash.slice(0, 32)}`)
+        ev('onchain', 'orchestrator', `TX confirmed on Solana devnet — slot ~${(350_000_000 + Math.floor(Math.random() * 1_000_000)).toLocaleString()}`)
+        ev('onchain', 'orchestrator', `On-chain proof: ${explorerUrl}`)
+      },
+    },
+
+    // ─── Step 4: Reputation-Based Delegation ───────────────────
     {
       duration: 2000,
       execute() {
@@ -83,17 +109,17 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
       },
     },
 
-    // ─── Step 4: Researcher x402 Payments ──────────────────────
+    // ─── Step 5: Researcher x402 Payments ──────────────────────
     {
       duration: 2500,
       execute() {
         setActiveAgentId('researcher')
         const payments = [
-          { url: 'allium.xyz/v1/wallet-risk',       amt: USDC(0.50), label: 'Wallet risk profile' },
-          { url: 'allium.xyz/v1/vesting-audit',      amt: USDC(1.00), label: 'Token vesting schedule' },
-          { url: 'allium.xyz/v1/dex-flows/jupiter',  amt: USDC(0.75), label: 'Jupiter DEX flow analysis' },
-          { url: 'allium.xyz/v1/whale-watch/7d',     amt: USDC(2.00), label: 'Whale movement report (7d)' },
-          { url: 'allium.xyz/v1/liquidation-risk',   amt: USDC(1.50), label: 'AAVE liquidation risk scan' },
+          { url: 'allium.xyz/v1/wallet-risk',      amt: USDC(0.50), label: 'Wallet risk profile' },
+          { url: 'allium.xyz/v1/vesting-audit',     amt: USDC(1.00), label: 'Token vesting schedule' },
+          { url: 'allium.xyz/v1/dex-flows/jupiter', amt: USDC(0.75), label: 'Jupiter DEX flow analysis' },
+          { url: 'allium.xyz/v1/whale-watch/7d',    amt: USDC(2.00), label: 'Whale movement report (7d)' },
+          { url: 'allium.xyz/v1/liquidation-risk',  amt: USDC(1.50), label: 'AAVE liquidation risk scan' },
         ]
         let totalSpent = 0
         let txCount = 0
@@ -115,7 +141,7 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
       },
     },
 
-    // ─── Step 5: Sub-delegation Researcher → Scraper ───────────
+    // ─── Step 6: Sub-delegation Researcher → Scraper ───────────
     {
       duration: 1500,
       execute() {
@@ -124,14 +150,10 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
         const r = agents.find(a => a.id === 'researcher')
         const subBudget = USDC(10)
 
-        updateAgent('researcher', {
-          delegated: (r?.delegated ?? 0) + subBudget,
-        })
-
+        updateAgent('researcher', { delegated: (r?.delegated ?? 0) + subBudget })
         ev('delegation', 'scraper',
           `Researcher → DataScraper: delegated ${fmtUSDC(subBudget)} (depth-2 chain)`)
 
-        // Scraper makes a payment
         updateAgent('scraper', {
           spent:        USDC(0.25),
           transactions: 1,
@@ -141,7 +163,7 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
       },
     },
 
-    // ─── Step 6: Trader Jupiter Swaps ──────────────────────────
+    // ─── Step 7: Trader Jupiter Swaps ──────────────────────────
     {
       duration: 1800,
       execute() {
@@ -168,7 +190,7 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
       },
     },
 
-    // ─── Step 7: Blocked — Overspend ───────────────────────────
+    // ─── Step 8: Blocked — Overspend ───────────────────────────
     {
       duration: 1500,
       execute() {
@@ -181,13 +203,12 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
           rejections: (t?.rejections ?? 0) + 1,
           trustScore: Math.max(0, (t?.trustScore ?? 35) - 5),
         })
-
         ev('blocked', 'trader',
           `REJECTED: $50.00 swap — exceeds remaining budget of ${fmtUSDC(remaining)}`, false)
       },
     },
 
-    // ─── Step 8: Blocked — Unauthorized Program ────────────────
+    // ─── Step 9: Blocked — Unauthorized Program ────────────────
     {
       duration: 1200,
       execute() {
@@ -199,13 +220,12 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
           rejections: (t?.rejections ?? 0) + 1,
           trustScore: Math.max(0, (t?.trustScore ?? 35) - 3),
         })
-
         ev('blocked', 'trader',
           'REJECTED: Allium endpoint not in allowlist — trader restricted to [Jupiter, TokenProgram]', false)
       },
     },
 
-    // ─── Step 9: Watchdog Alert ─────────────────────────────────
+    // ─── Step 10: Watchdog Alert ────────────────────────────────
     {
       duration: 1500,
       execute() {
@@ -219,14 +239,14 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
           'AUTO-THROTTLE: rate limit reduced 20 → 3 tx/min. Trader status: Throttled')
 
         updateAgent('trader', {
-          status: 'throttled',
-          tier:   'Throttled',
+          status:     'throttled',
+          tier:       'Throttled',
           trustScore: Math.max(0, (t?.trustScore ?? 35) - 8),
         })
       },
     },
 
-    // ─── Step 10: Dead Man's Switch ─────────────────────────────
+    // ─── Step 11: Dead Man's Switch ─────────────────────────────
     {
       duration: 2000,
       execute() {
@@ -244,13 +264,12 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
           trustScore: Math.max(0, (rogue?.trustScore ?? 12) - 20),
           tier:       'Probationary',
         })
-
         ev('blocked', 'rogue',
           'REJECTED: post-revocation spend attempt blocked (authority status: revoked)', false)
       },
     },
 
-    // ─── Step 11: Reputation Update ────────────────────────────
+    // ─── Step 12: Reputation Update ────────────────────────────
     {
       duration: 1500,
       execute() {
@@ -260,7 +279,7 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
         for (const a of agents) {
           if (a.id === 'orchestrator') continue
           const oldTier = a.tier
-          const newScore = a.trustScore  // already updated through the sim
+          const newScore = a.trustScore
           const newTier = a.id === 'rogue' || a.id === 'trader'
             ? getTierName(newScore)
             : getTierName(Math.min(100, newScore + (a.id === 'researcher' ? 4 : 1)))
@@ -272,16 +291,13 @@ export function buildSteps({ addEvent, updateAgent, setActiveAgentId, getAgents 
             })
           }
 
-          const arrow = newTier !== oldTier
-            ? `${oldTier} → ${newTier}`
-            : `${newTier} (unchanged)`
-
+          const arrow = newTier !== oldTier ? `${oldTier} → ${newTier}` : `${newTier} (unchanged)`
           ev('reputation', a.id, `Trust updated: score ${newScore} — tier: ${arrow}`)
         }
       },
     },
 
-    // ─── Step 12: Delegation Chain Verified ────────────────────
+    // ─── Step 13: Delegation Chain Verified ────────────────────
     {
       duration: 1200,
       execute() {

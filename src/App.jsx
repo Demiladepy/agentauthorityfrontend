@@ -14,23 +14,16 @@ export default function App() {
   const [isRunning,     setIsRunning]     = useState(false)
   const [isComplete,    setIsComplete]    = useState(false)
   const [activeAgentId, setActiveAgentId] = useState(null)
+  const [devnetTx,      setDevnetTx]      = useState(null)
   const eidRef = useRef(0)
 
-  // ── Stable callbacks for the simulation engine ─────────────
   const addEvent = useCallback((event) => {
     setEvents(prev => [...prev, { ...event, id: eidRef.current++ }])
   }, [])
 
-  const updateAgent = useCallback((id, updates) => {
-    setAgents(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a))
-  }, [])
-
-  // Provides a snapshot for steps that need to read current agent state
-  // We keep a live ref so the snapshot is always fresh
   const agentsRef = useRef(getInitialAgents())
   const getAgents = useCallback(() => agentsRef.current, [])
 
-  // Keep the ref in sync with React state
   const setAgentsWithRef = useCallback((updater) => {
     setAgents(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
@@ -43,9 +36,7 @@ export default function App() {
     setAgentsWithRef(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a))
   }, [setAgentsWithRef])
 
-  // ── Main simulation runner ──────────────────────────────────
   const runSimulation = useCallback(async () => {
-    // Reset
     const initial = getInitialAgents()
     agentsRef.current = initial
     setAgentsWithRef(initial)
@@ -55,6 +46,7 @@ export default function App() {
     setIsComplete(false)
     setIsRunning(true)
     setActiveAgentId(null)
+    setDevnetTx(null)
 
     await sleep(200)
 
@@ -63,6 +55,7 @@ export default function App() {
       updateAgent: updateAgentWithRef,
       setActiveAgentId,
       getAgents,
+      setDevnetTx,
     })
 
     for (let i = 0; i < steps.length; i++) {
@@ -78,11 +71,12 @@ export default function App() {
     setIsComplete(true)
   }, [addEvent, updateAgentWithRef, setAgentsWithRef, getAgents])
 
-  // ── Derived stats ───────────────────────────────────────────
-  const totalSpent    = agents.reduce((s, a) => s + a.spent, 0)
-  const totalBlocked  = agents.reduce((s, a) => s + a.rejections, 0)
-  const activeAgents  = agents.filter(a => a.status === 'active' || a.status === 'throttled' || a.status === 'funded').length
-  const totalEvents   = events.length
+  const totalSpent   = agents.reduce((s, a) => s + a.spent, 0)
+  const totalBlocked = agents.reduce((s, a) => s + a.rejections, 0)
+  const activeAgents = agents.filter(a =>
+    a.status === 'active' || a.status === 'throttled' || a.status === 'funded'
+  ).length
+  const totalEvents = events.length
 
   const stats = { totalSpent, totalBlocked, activeAgents, totalEvents }
 
@@ -101,6 +95,7 @@ export default function App() {
             isRunning={isRunning}
             activeAgentId={activeAgentId}
             stats={stats}
+            devnetTx={devnetTx}
           />
         )}
         <Architecture />
